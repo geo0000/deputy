@@ -1,0 +1,7 @@
+name = Deputy
+description = This module provides form for creation deputy.
+dependencies[] = ctools
+dependencies[] = date_popup
+
+core = 7.x
+package = Deputy

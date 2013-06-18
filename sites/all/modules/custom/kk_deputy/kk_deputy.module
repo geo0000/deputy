@@ -1,0 +1,191 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function kk_deputy_menu() {
+  $items['deputy/%ctools_js/form'] = array(
+    'title' => 'Deputy form',
+    'page callback' => 'kk_deputy_form_callback',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  $items['deputy-start'] = array(
+    'title' => 'Deputy form link',
+    'page callback' => 'kk_deputy_start',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+function kk_deputy_start() {
+
+  // Include the CTools tools that we need.
+  ctools_include('ajax');
+  ctools_include('modal');
+
+  // Add CTools' javascript to the page.
+  ctools_modal_add_js();
+  $links[] = l(t('Deputy form nojs'), 'deputy/nojs/form');
+  $links[] = ctools_modal_text_button(t('Deputy form modal'), 'deputy/nojs/form', t('Start'));
+  return  array('#theme' => 'item_list', '#items' => $links);
+}
+
+function kk_deputy_form_callback($js = NULL) {
+
+  // Fall back if $js is not set.
+  if (!$js) {
+    return drupal_get_form('kk_deputy_form');
+  }
+
+  ctools_include('modal');
+  ctools_include('ajax');
+
+
+  $form_state = array(
+    'ajax' => TRUE,
+  );
+
+  $output = ctools_modal_form_wrapper('kk_deputy_form', $form_state);
+
+  if (!empty($form_state['executed'])) {
+    // We'll just overwrite the form output if it was successful.
+    $output = array();
+    ctools_add_js('ajax-responder');
+    if (isset($_GET['destination'])) {
+      $output[] = ctools_ajax_command_redirect($_GET['destination']);
+    }
+    else {
+      $output[] = ctools_ajax_command_reload();
+    }
+  }
+
+  print ajax_render($output);
+}
+
+function kk_deputy_form($form, &$form_state) {
+  $form['period'] = array(
+    '#type' => 'radios',
+    '#name' => 'period',
+    '#title' => t('Tidsperiode'),
+    '#options' => array(
+      'indefinitely' => t('Indefinitely'),
+      'interval' => t('Time interval')
+    ),
+  );
+
+  $form['date_container'] = array(
+    '#type' => 'container',
+    '#states' => array(
+      'visible'  => array(
+        ':input[name="period"]' => array(
+          'value' => 'interval',
+        ),
+      ),
+    )
+  );
+
+  $form['date_container']['mostly_used_period'] = array(
+    '#type' => 'radios',
+    '#name' => 'mostly_used_period',
+    '#options' => array(
+      '1week' => t('1 week'),
+      '2weeks' => t('2 weeks'),
+      '3weeks' => t('3 weeks'),
+    ),
+
+    '#suffix' => '<span>' . t('or') . '</span>',
+    '#attributes' => array(
+      'class' => array('form-item')
+    ),
+  );
+
+  $form['date_container']['date_from'] = array(
+    '#type' => 'date_popup',
+    '#title' => t('From'),
+    '#default_value' => NULL,
+    '#date_type' => DATE_DATETIME,
+    '#date_timezone' => date_default_timezone(),
+    '#date_format' => 'dmY Hi',
+    '#date_increment' => 1,
+    '#date_year_range' => '-3:+3',
+    '#date_label_position' => 'none'
+  );
+
+  $form['date_container']['date_to'] = array(
+    '#type' => 'date_popup',
+    '#title' => t('To'),
+    '#default_value' => NULL,
+    '#date_type' => DATE_DATETIME,
+    '#date_timezone' => date_default_timezone(),
+    '#date_format' => 'dmY Hi',
+    '#date_increment' => 1,
+    '#date_year_range' => '-3:+3',
+    '#date_label_position' => 'none'
+  );
+
+  $form['resume'] = array(
+    '#type' => 'item',
+    '#title' => t('Resume'),
+    '#markup' => ''
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save')
+  );
+
+  return $form;
+}
+
+/**
+ * Implement hook_date_popup_process_alter().
+ *
+ * @param array $element
+ *   An associative array containing the properties of the date_popup element.
+ * @param array $form_state
+ *   A keyed array containing the current state of the form.
+ * @param array $context
+ *   An associative array containing the following keys:
+ *   - form: Nested array of form elements that comprise the form.
+ *
+ * @see date_popup_element_process()
+ */
+function kk_deputy_date_popup_process_alter(&$element, &$form_state, $context) {
+  // Add placeholders to date field
+  $element['date']['#attributes']['placeholder'] = t('Date');
+  $element['time']['#attributes']['placeholder'] = t('Time');
+
+  unset($element['date']['#description']);
+  unset($element['time']['#description']);
+
+  // override timeEntry settings
+  $settings = array(
+    'datePopup' => array(
+      $element['time']['#id'] => array(
+        'settings' => array(
+          'separator' => '',
+          'noSeparatorEntry' => true
+        )
+      )
+    )
+  );
+
+  drupal_add_js($settings, 'setting');
+
+  // Pre validate date field
+  array_unshift($element['#element_validate'], 'kk_deputy_period_date_validate');
+}
+
+/*
+ * Make possibility to leave empty time field
+ */
+function kk_deputy_period_date_validate($element, &$form_state) {
+  if (!empty($element['#value']['date']) && isset($element['#value']['time']) && empty($element['#value']['time'])) {
+    $form_state['values'][$element['#name']]['time'] = '0000';
+  }
+}
