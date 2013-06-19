@@ -22,8 +22,10 @@ function kk_deputy_menu() {
   return $items;
 }
 
+/**
+ * Start page for deputy
+ */
 function kk_deputy_start() {
-
   // Include the CTools tools that we need.
   ctools_include('ajax');
   ctools_include('modal');
@@ -32,9 +34,15 @@ function kk_deputy_start() {
   ctools_modal_add_js();
   $links[] = l(t('Deputy form nojs'), 'deputy/nojs/form');
   $links[] = ctools_modal_text_button(t('Deputy form modal'), 'deputy/nojs/form', t('Start'));
-  return  array('#theme' => 'item_list', '#items' => $links);
+  return array('#theme' => 'item_list', '#items' => $links);
 }
 
+/**
+ * Callback function for deputy form
+ *
+ * @param string $js
+ * @return array|mixed
+ */
 function kk_deputy_form_callback($js = NULL) {
 
   // Fall back if $js is not set.
@@ -67,6 +75,12 @@ function kk_deputy_form_callback($js = NULL) {
   print ajax_render($output);
 }
 
+/**
+ * Deputy form
+ * @param array $form
+ * @param array $form_state
+ * @return mixed
+ */
 function kk_deputy_form($form, &$form_state) {
   $form['period'] = array(
     '#type' => 'radios',
@@ -76,12 +90,13 @@ function kk_deputy_form($form, &$form_state) {
       'indefinitely' => t('Indefinitely'),
       'interval' => t('Time interval')
     ),
+    '#default_value' => (isset($form_state['input']['period']) ? $form_state['input']['period'] : 'indefinitely')
   );
 
   $form['date_container'] = array(
     '#type' => 'container',
     '#states' => array(
-      'visible'  => array(
+      'visible' => array(
         ':input[name="period"]' => array(
           'value' => 'interval',
         ),
@@ -89,16 +104,18 @@ function kk_deputy_form($form, &$form_state) {
     )
   );
 
-  $form['date_container']['mostly_used_period'] = array(
+  $form['date_container']['deputy_period'] = array(
     '#type' => 'radios',
-    '#name' => 'mostly_used_period',
+    '#name' => 'deputy_period',
+    '#title' => t('Select period'),
     '#options' => array(
       '1week' => t('1 week'),
       '2weeks' => t('2 weeks'),
       '3weeks' => t('3 weeks'),
+      'other' => t('other')
     ),
-
-    '#suffix' => '<span>' . t('or') . '</span>',
+    '#default_value' => (isset($form_state['input']['deputy_period']) ? $form_state['input']['deputy_period'] : '1week'),
+//    '#suffix' => '<span>' . t('or') . '</span>',
     '#attributes' => array(
       'class' => array('form-item')
     ),
@@ -113,7 +130,19 @@ function kk_deputy_form($form, &$form_state) {
     '#date_format' => 'dmY Hi',
     '#date_increment' => 1,
     '#date_year_range' => '-3:+3',
-    '#date_label_position' => 'none'
+    '#date_label_position' => 'none',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="deputy_period"]' => array(
+          'value' => 'other',
+        ),
+      ),
+      'required' => array(
+        ':input[name="deputy_period"]' => array(
+          'value' => 'other',
+        ),
+      ),
+    )
   );
 
   $form['date_container']['date_to'] = array(
@@ -125,13 +154,26 @@ function kk_deputy_form($form, &$form_state) {
     '#date_format' => 'dmY Hi',
     '#date_increment' => 1,
     '#date_year_range' => '-3:+3',
-    '#date_label_position' => 'none'
+    '#date_label_position' => 'none',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="deputy_period"]' => array(
+          'value' => 'other',
+        ),
+      ),
+      'required' => array(
+        ':input[name="deputy_period"]' => array(
+          'value' => 'other',
+        ),
+      ),
+    )
   );
 
   $form['resume'] = array(
     '#type' => 'item',
     '#title' => t('Resume'),
-    '#markup' => ''
+    '#markup' => '<div>' . t('Selected') . ':</div><div id="deputy-employee"></div>'.
+      '<div>' . t('Period') . ':</div><div id="deputy-date"></div>'
   );
 
   $form['submit'] = array(
@@ -140,6 +182,42 @@ function kk_deputy_form($form, &$form_state) {
   );
 
   return $form;
+}
+
+/**
+ * Deputy form validation
+ * @param array $form
+ * @param array $form_state
+ * @return mixed
+ */
+function kk_deputy_form_validate($form, &$form_state) {
+  // Little shortcut
+  $values = & $form_state['values'];
+
+  // check dates
+  if ($values['period'] == 'interval' && $values['deputy_period'] == 'other') {
+    if (!isset($values['date_from'])) {
+      form_set_error('date_from', t('Date from is required'));
+    }
+
+    if (!isset($values['date_to'])) {
+      form_set_error('date_to', t('Date to is required'));
+    }
+
+    if (isset($values['date_from']) && isset($values['date_to']) && $values['date_from'] > $values['date_to']) {
+      form_set_error('date_to', t('Date to must be greater than Date from'));
+    }
+  }
+}
+
+/**
+ * Deputy form submit
+ * @param array $form
+ * @param array $form_state
+ * @return mixed
+ */
+function kk_deputy_form_submit($form, &$form_state) {
+  drupal_set_message('Deputy is saved');
 }
 
 /**
@@ -169,7 +247,7 @@ function kk_deputy_date_popup_process_alter(&$element, &$form_state, $context) {
       $element['time']['#id'] => array(
         'settings' => array(
           'separator' => '',
-          'noSeparatorEntry' => true
+          'noSeparatorEntry' => TRUE
         )
       )
     )
@@ -181,8 +259,13 @@ function kk_deputy_date_popup_process_alter(&$element, &$form_state, $context) {
   array_unshift($element['#element_validate'], 'kk_deputy_period_date_validate');
 }
 
-/*
+/**
+ * Period field validate
+ *
  * Make possibility to leave empty time field
+ *
+ * @param array $element
+ * @param array $form_state
  */
 function kk_deputy_period_date_validate($element, &$form_state) {
   if (!empty($element['#value']['date']) && isset($element['#value']['time']) && empty($element['#value']['time'])) {
